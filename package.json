@@ -1,0 +1,22 @@
+{
+  "name": "aksobridged",
+  "version": "0.1.0",
+  "description": "A daemon for managing user sessions on a web server",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AksoEo/aksobridged.git"
+  },
+  "author": "",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/AksoEo/aksobridged/issues"
+  },
+  "homepage": "https://github.com/AksoEo/aksobridged#readme",
+  "dependencies": {
+    "@tejo/akso-client": "^0.1.14"
+  }
+}
