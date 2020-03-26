@@ -2,6 +2,7 @@ const { Worker, isMainThread, MessageChannel } = require('worker_threads');
 const { cpus: getCPUs } = require('os');
 const path = require('path');
 const { setThreadName, debug, info, error } = require('./log.js');
+const { version } = require('../package.json');
 
 if (!isMainThread) {
     error('main.js running off-thread');
@@ -10,11 +11,14 @@ if (!isMainThread) {
 
 setThreadName('MAIN');
 
+const host = 'https://apitest.akso.org'; // TODO: make configurable
+const userAgent = `AKSOBridge/${version} (+https://github.com/AksoEo/aksobridged)`;
+
 let isClosing = false;
 
 function createWorkerInSlot (id) {
     const worker = new Worker(path.join(__dirname, 'worker.js'), {
-        workerData: { id },
+        workerData: { id, host, userAgent },
     });
     const { port1: mainPort, port2: workerPort } = new MessageChannel();
     worker.postMessage({ type: 'init', channel: workerPort }, [workerPort]);
@@ -22,9 +26,9 @@ function createWorkerInSlot (id) {
         mainPort.close();
         error(`worker ${id} terminated: ${err}`);
     });
-    worker.on('exit', () => {
+    worker.on('exit', code => {
         if (!isClosing) {
-            info(`worker exited; creating new worker in slot ${id}`);
+            info(`worker exited with code ${code}; creating new worker in slot ${id}`);
             createWorkerInSlot(id);
         }
     });

@@ -17,6 +17,8 @@
   },
   "homepage": "https://github.com/AksoEo/aksobridged#readme",
   "dependencies": {
-    "@tejo/akso-client": "^0.1.14"
+    "@msgpack/msgpack": "^1.12.0",
+    "@tejo/akso-client": "^0.1.15",
+    "tough-cookie": "^4.0.0"
   }
 }

@@ -5,7 +5,7 @@ When a client connects, the first bytes must be "abx1" or the server will consid
 A message consists of 4 bytes (little endian) for message length followed by the message contents, which are msgpack-encoded objects.
 
 ### Messages
-All messages have a `t` field in the root object indicating message type (a string), and an `i` field for the message id.
+All messages have a `t` field in the root object indicating message type (a string), and an `i` field for the message id (a string).
 Every client message will receive a response from the server.
 
 #### Client Messages
@@ -35,7 +35,9 @@ Additional fields:
 ##### type `-totp`
 
 #### Server Responses
-Server responses always have `t` set to the string `~`.
+Server responses always have `t` set to the string `~` or `~!`.
+
+If the type is `~!` the server encountered an unexpected error. The message will contain a `m` field with a human-readable error string.
 
 ##### type `hi`
 ACK. Additional fields:
@@ -56,7 +58,7 @@ Additional fields if `s` is true:
 
 - `uea`: (str) uea code
 - `id`: (number) user id
-- `totp`: (bool) if true, the user has set up TOTP
+- `totp`: (bool) if true, the user still needs to use TOTP
 
 Additional fields if `s` is false:
 
@@ -89,3 +91,17 @@ Tells the client to set user cookies.
 Additional fields:
 
 - `co`: an object mapping cookie names to cookie values
+
+##### type `TXERR`
+A protocol error. The server will subsequently close the connection.
+
+Additional fields:
+
+- `c`: (number) an error code
+- `m`: (string) a human readable error string
+
+###### Error codes
+- `100`: bad magic number
+- `101`: insane message length (negative message length or one that is too large)
+- `102`: message decode error
+- `200`: unknown message type
