@@ -170,7 +170,7 @@ Tells the client to set user cookies.
 
 Additional fields:
 
-- `co`: an object mapping cookie names to cookie values
+- `co`: (string[]) a list of set-cookie header values
 
 ##### type `TXERR`
 A protocol error. The server will subsequently close the connection.

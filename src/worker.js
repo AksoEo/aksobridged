@@ -53,7 +53,6 @@ const encodeMessage = msg => {
     return buf;
 };
 
-// TODO: cookie handling
 class ClientHandler {
     constructor (connection) {
         this.connection = connection;
@@ -151,6 +150,7 @@ class ClientHandler {
     }
 
     onClose () {
+        this.flushSendCookies();
         this.didEnd = true;
     }
 
@@ -190,6 +190,23 @@ class ClientHandler {
             this.waitTasks--;
         });
     }
+
+    debouncedSetCookie = null;
+    cookieQueue = [];
+    flushSendCookies () {
+        clearTimeout(this.debouncedSetCookie);
+        if (this.cookieQueue.length) {
+            this.send({ t: 'co', co: this.cookieQueue });
+            this.cookieQueue = [];
+        }
+    }
+
+    recordSetCookie (cookie) {
+        this.cookieQueue.push(cookie);
+        if (!this.debouncedSetCookie) {
+            this.debouncedSetCookie = setTimeout(() => this.flushSendCookies(), 1);
+        }
+    }
 }
 
 function assertType (v, t, n) {
@@ -209,14 +226,25 @@ const messageHandlers = {
             throw new Error('double handshake');
         }
 
-        conn.cookies = new CookieJar();
+        conn.cookies = {
+            conn,
+            jar: new CookieJar(),
+            // fetch-cookie only uses these two methods
+            getCookieString (...args) {
+                return this.jar.getCookieString(...args);
+            },
+            setCookie (cookie, url, callback) {
+                const { conn, jar } = this;
+                conn.recordSetCookie(cookie); // FIXME: should url be checked?
+                return jar.setCookie(cookie, url, callback);
+            },
+        };
 
+        // initialize cookies
         for (const k in co) {
             const v = co[k];
             assertType(v, 'string', 'expected cookie value to be a string');
-            conn.cookies.setCookieSync(`${k}=${v}`, workerData.host, {
-                sameSiteContext: 'lax',
-            });
+            conn.cookies.jar.setCookieSync(`${k}=${v}`, workerData.host);
         }
 
         // TODO: pass IP somehow...?
