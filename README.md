@@ -34,6 +34,62 @@ Additional fields:
 
 ##### type `-totp`
 
+##### type `get`
+Additional fields:
+
+- `p`: (str) path
+- `q`: (object) query
+
+##### type `delete`
+Additional fields:
+
+- `p`: (str) path
+- `q`: (object) query
+
+##### type `post`
+Additional fields:
+
+- `p`: (str) path
+- `b`: (object|null) body
+- `q`: (object) query
+- `f`: (object) files
+    + name ↦ object
+        * `t`: (str) mime type
+        * `b`: (Buffer) file buffer
+
+##### type `put`
+Additional fields:
+
+- `p`: (str) path
+- `b`: (object|null) body
+- `q`: (object) query
+- `f`: (object) files
+    + name ↦ object
+        * `t`: (str) mime type
+        * `b`: (Buffer) file buffer
+
+##### type `patch`
+Additional fields:
+
+- `p`: (str) path
+- `b`: (object|null) body
+- `q`: (object) query
+
+##### type `perms`
+Additional fields:
+
+- `p`: (str[]) perms to check
+
+##### type `permscf`
+Additional fields:
+
+- `f`: (str[]) codeholder fields formatted like `field.rw` to check
+
+##### type `permsocf`
+Additional fields:
+
+- `f`: (str[]) own codeholder fields formatted like `field.rw` to check
+
 #### Server Responses
 Server responses always have `t` set to the string `~` or `~!`.
 
@@ -48,6 +104,7 @@ Additional fields if `auth` is true:
 
 - `uea`: (str) uea code
 - `id`: (number) user id
+- `totp`: (bool) if true, the user still needs to use TOTP
 
 ##### type `login`
 Additional fields:
@@ -84,6 +141,29 @@ Additional fields:
 
 - `s` (bool) if true, deleting TOTP succeeded.
 
+##### type `get`, `delete`, `post`, `put`, `patch`
+Additional fields:
+
+- `k`: (bool) response is okay
+- `sc`: (number) status code
+- `h`: (object) response headers (e.g. x-total-items)
+- `b`: (any?) response body
+
+##### type `perms`
+Additional fields:
+
+- `p`: (bool[]) whether the individual permissions are granted; in the same order as the input
+
+##### type `permscf`
+Additional fields:
+
+- `f`: (bool[]) whether the individual codeholder field permissions are granted; in the same order as the input
+
+##### type `permsocf`
+Additional fields:
+
+- `f`: (bool[]) whether the individual own codeholder field permissions are granted; in the same order as the input
+
 #### Server Messages
 ##### type `co`
 Tells the client to set user cookies.
@@ -100,8 +180,12 @@ Additional fields:
 - `c`: (number) an error code
 - `m`: (string) a human readable error string
 
+##### type `❤`
+This is a heartbeat message to keep the socket from timing out during slow operations.
+
 ###### Error codes
 - `100`: bad magic number
 - `101`: insane message length (negative message length or one that is too large)
 - `102`: message decode error
+- `103`: timed out
 - `200`: unknown message type

@@ -1,6 +1,7 @@
 const { Worker, isMainThread, MessageChannel } = require('worker_threads');
 const { cpus: getCPUs } = require('os');
 const path = require('path');
+const fs = require('fs');
 const { setThreadName, debug, info, error } = require('./log.js');
 const { version } = require('../package.json');
 
@@ -11,6 +12,8 @@ if (!isMainThread) {
 
 setThreadName('MAIN');
 
+const bridgePath = 'aksobridge';
+fs.mkdirSync(bridgePath, { recursive: true, mode: 0o755 });
 const host = 'https://apitest.akso.org'; // TODO: make configurable
 const userAgent = `AKSOBridge/${version} (+https://github.com/AksoEo/aksobridged)`;
 
@@ -18,7 +21,7 @@ let isClosing = false;
 
 function createWorkerInSlot (id) {
     const worker = new Worker(path.join(__dirname, 'worker.js'), {
-        workerData: { id, host, userAgent },
+        workerData: { path: bridgePath, id, host, userAgent },
     });
     const { port1: mainPort, port2: workerPort } = new MessageChannel();
     worker.postMessage({ type: 'init', channel: workerPort }, [workerPort]);
@@ -46,10 +49,19 @@ function close () {
     if (isClosing) return;
     isClosing = true;
     info('closing all workers');
+    const terminatePromises = [];
     for (const item of pool) {
         item.channel.postMessage({ type: 'close' });
-        item.channel.on('close', () => item.worker.terminate());
+        terminatePromises.push(new Promise(resolve => {
+            item.channel.on('close', () => {
+                item.worker.terminate();
+                resolve();
+            });
+        }));
     }
+    Promise.all(terminatePromises).then(() => {
+        fs.rmdirSync(bridgePath);
+    }).catch(error);
 }
 
 process.on('SIGINT', close);

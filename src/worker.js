@@ -3,7 +3,12 @@ const { workerData, parentPort } = require('worker_threads');
 const { UserClient } = require('@tejo/akso-client');
 const { CookieJar } = require('tough-cookie');
 const { encode, decode } = require('@msgpack/msgpack');
-const { setThreadName, info, debug } = require('./log');
+const { setThreadName, info, debug, error } = require('./log');
+
+process.on('uncaughtException', err => {
+    error(`!!!! uncaught exception`);
+    console.error(err);
+});
 
 setThreadName(`W${workerData.id}`);
 parentPort.on('message', message => {
@@ -31,7 +36,7 @@ function init (channel) {
         new ClientHandler(conn);
     });
 
-    const listenAddr = `./ipc${workerData.id}`;
+    const listenAddr = `${workerData.path}/ipc${workerData.id}`;
     server.listen(listenAddr, () => {
         info(`listening on ${listenAddr}`);
     });
@@ -41,29 +46,34 @@ const MAGIC = Buffer.from('abx1');
 const MAX_SANE_MESSAGE_LEN = 10 * 1024 * 1024; // 10 MiB
 
 const encodeMessage = msg => {
-    const packed = encode(msg);
+    const packed = Buffer.from(encode(msg));
     const buf = Buffer.allocUnsafe(packed.length + 4);
     buf.writeInt32LE(buf.length, 0);
     packed.copy(buf, 4);
     return buf;
 };
 
+// TODO: cookie handling
 class ClientHandler {
     constructor (connection) {
         this.connection = connection;
+        this.connection.setTimeout(1000);
         this.connection.on('data', data => this.onData(data));
+        this.connection.on('timeout', () => this.onTimeout());
         this.connection.on('close', () => this.onClose());
 
         this.didInit = false;
         this.currentMessageLen = null;
         this.currentMessageBuffer = null;
         this.currentMessageCursor = 0;
+        this.didEnd = false;
 
         // -----
         this.didHandshake = false;
         this.ip = null;
         this.cookies = null;
         this.client = null;
+        this.waitTasks = 0;
     }
 
     flushMessage () {
@@ -90,44 +100,39 @@ class ClientHandler {
                 this.didInit = true;
                 cursor += MAGIC.length;
             } else {
-                connection.write(encodeMessage({
-                    t: 'TXERR',
-                    c: 400,
-                    m: 'bad magic',
-                }));
-                connection.close();
+                this.close('TXERR', 400, 'bad magic');
                 return;
             }
         }
 
         while (cursor < data.length) {
-            if (currentMessageLen === null) {
+            if (this.currentMessageLen === null) {
                 // awaiting message length
-                currentMessageLen = data.readInt32LE(cursor);
-                if (currentMessageLen < 0) {
+                this.currentMessageLen = data.readInt32LE(cursor);
+                if (this.currentMessageLen < 0) {
                     this.close('TXERR', 401, 'message has negative length');
                     return;
-                } else if (currentMessageLen > MAX_SANE_MESSAGE_LEN) {
+                } else if (this.currentMessageLen > MAX_SANE_MESSAGE_LEN) {
                     this.close('TXERR', 401, 'message is too long');
                     return;
                 }
                 cursor += 4;
-                currentMessageBuffer = Buffer.allocUnsafe(currentMessageLen);
-                currentMessageCursor = 0;
+                this.currentMessageBuffer = Buffer.allocUnsafe(this.currentMessageLen);
+                this.currentMessageCursor = 0;
             } else {
                 // message contents
-                const messageBytesLeft = currentMessageLen - currentMessageCursor;
+                const messageBytesLeft = this.currentMessageLen - this.currentMessageCursor;
                 const inputBytesLeft = data.length - cursor;
 
                 if (inputBytesLeft >= messageBytesLeft) {
                     // rest of message is entirely contained in data
-                    data.copy(currentMessageBuffer, currentMessageCursor, cursor, cursor + messageBytesLeft);
-                    flushMessage();
+                    data.copy(this.currentMessageBuffer, this.currentMessageCursor, cursor, cursor + messageBytesLeft);
+                    this.flushMessage();
                     cursor += messageBytesLeft;
                 } else {
                     // data contains a part of the message
-                    data.copy(currentMessageBuffer, currentMessageCursor, cursor, cursor + inputBytesLeft);
-                    currentMessageCursor += inputBytesLeft;
+                    data.copy(this.currentMessageBuffer, this.currentMessageCursor, cursor, cursor + inputBytesLeft);
+                    this.currentMessageCursor += inputBytesLeft;
                     cursor += inputBytesLeft;
                 }
             }
@@ -135,16 +140,26 @@ class ClientHandler {
     }
 
     send (data) {
+        if (this.didEnd) return;
         this.connection.write(encodeMessage(data));
     }
 
     close (t, c, m) {
-        this.send({ t, c, m });
-        this.connection.close();
+        if (this.didEnd) return;
+        this.didEnd = true;
+        this.connection.end(encodeMessage({ t, c, m }));
     }
 
     onClose () {
-        debug('connection closed');
+        this.didEnd = true;
+    }
+
+    onTimeout () {
+        if (this.waitTasks > 0) {
+            this.send({ t: '❤' });
+        } else {
+            this.close({ t: 'TXERR', c: 103, m: 'timed out' });
+        }
     }
 
     // -----
@@ -158,6 +173,7 @@ class ClientHandler {
             return;
         }
 
+        this.waitTasks++;
         handler(this, message).then(response => {
             this.send({
                 t: '~',
@@ -170,12 +186,16 @@ class ClientHandler {
                 i: message.i,
                 m: err.toString(),
             });
+        }).then(() => {
+            this.waitTasks--;
         });
     }
 }
 
 function assertType (v, t, n) {
-    if (typeof v !== t) {
+    let chk = typeof v === t;
+    if (t === 'array') chk = Array.isArray(v);
+    if (!chk) {
         throw new Error(n);
     }
 }
@@ -207,5 +227,256 @@ const messageHandlers = {
         });
 
         conn.didHandshake = true;
+
+        const sesx = await conn.client.restoreSession();
+        if (sesx === false) return { auth: false };
+        return {
+            auth: true,
+            uea: sesx.ueaCode,
+            id: sesx.id,
+            totp: sesx.totpSetUp && !sesx.totpUsed,
+        };
+    },
+    login: async (conn, { un, pw }) => {
+        assertType(un, 'string', 'expected un to be a string');
+        assertType(pw, 'string', 'expected pw to be a string');
+        try {
+            const sesx = await conn.client.logIn(un, pw);
+            return {
+                s: true,
+                uea: sesx.ueaCode,
+                id: sesx.id,
+                totp: sesx.totpSetUp && !sesx.totpUsed,
+            };
+        } catch (err) {
+            if (err.statusCode === 401) {
+                return { s: false, nopw: false };
+            } else if (err.statusCode === 409) {
+                return { s: false, nopw: true };
+            } else {
+                throw err;
+            }
+        }
+    },
+    logout: async (conn) => {
+        try {
+            await conn.client.logOut();
+            return { s: true };
+        } catch (err) {
+            if (err.statusCode === 404) {
+                return { s: false };
+            } else {
+                throw err;
+            }
+        }
+    },
+    totp: async (conn, { co, se, r }) => {
+        assertType(co, 'string', 'expected co to be a string');
+        assertType(r, 'boolean', 'expected r to be a bool');
+        try {
+            if (se) {
+                await conn.client.totpSetUp(se, co, r);
+            } else {
+                await conn.client.totpLogIn(co, r);
+            }
+            return { s: true };
+        } catch (err) {
+            if (err.statusCode === 401) {
+                return { s: false, bad: false, nosx: false };
+            } else if (err.statusCode === 403) {
+                return { s: false, bad: true, nosx: false };
+            } else if (err.statusCode === 404) {
+                return { s: false, bad: false, nosx: true };
+            } else {
+                throw err;
+            }
+        }
+    },
+    '-totp': async (conn) => {
+        try {
+            await conn.client.totpRemove();
+            return { s: true };
+        } catch (err) {
+            if (err.statusCode === 401 || err.statusCode === 404) {
+                return { s: false };
+            } else {
+                throw err;
+            }
+        }
+    },
+    get: async (conn, { p, q }) => {
+        assertType(p, 'string', 'expected p to be a string');
+        assertType(q, 'object', 'expected q to be an object');
+
+        try {
+            const res = await conn.client.get(p, q);
+            return {
+                k: res.ok,
+                sc: res.res.statusCode,
+                h: collectHeaders(headers),
+                b: res.body,
+            };
+        } catch (err) {
+            return {
+                k: false,
+                sc: err.statusCode,
+                h: {},
+                b: null,
+            };
+        }
+    },
+    delete: async (conn, { p, q }) => {
+        assertType(p, 'string', 'expected p to be a string');
+        assertType(q, 'object', 'expected q to be an object');
+
+        try {
+            const res = await conn.client.delete(p, q);
+            return {
+                k: res.ok,
+                sc: res.res.statusCode,
+                h: collectHeaders(headers),
+                b: res.body,
+            };
+        } catch (err) {
+            return {
+                k: false,
+                sc: err.statusCode,
+                h: {},
+                b: null,
+            };
+        }
+    },
+    post: async (conn, { p, b, q, f }) => {
+        assertType(p, 'string', 'expected p to be a string');
+        if (b !== null) assertType(b, 'object', 'expected b to be an object or null');
+        assertType(q, 'object', 'expected q to be an object');
+        assertType(f, 'object', 'expected f to be an object');
+
+        const files = [];
+        for (const n in f) {
+            const file = f[n];
+            assertType(file, 'object', 'expected file to be an object');
+            assertType(file.t, 'string', 'expected file.t to be a string');
+            files.push({
+                name: n,
+                type: file.t,
+                value: file.b,
+            });
+        }
+
+        try {
+            const res = await conn.client.post(p, b, q, files);
+            return {
+                k: res.ok,
+                sc: res.res.statusCode,
+                h: collectHeaders(headers),
+                b: res.body,
+            };
+        } catch (err) {
+            return {
+                k: false,
+                sc: err.statusCode,
+                h: {},
+                b: null,
+            };
+        }
+    },
+    put: async (conn, { p, b, q, f }) => {
+        assertType(p, 'string', 'expected p to be a string');
+        if (b !== null) assertType(b, 'object', 'expected b to be an object or null');
+        assertType(q, 'object', 'expected q to be an object');
+        assertType(f, 'object', 'expected f to be an object');
+
+        const files = [];
+        for (const n in f) {
+            const file = f[n];
+            assertType(file, 'object', 'expected file to be an object');
+            assertType(file.t, 'string', 'expected file.t to be a string');
+            files.push({
+                name: n,
+                type: file.t,
+                value: file.b,
+            });
+        }
+
+        try {
+            const res = await conn.client.put(p, b, q, files);
+            return {
+                k: res.ok,
+                sc: res.res.statusCode,
+                h: collectHeaders(headers),
+                b: res.body,
+            };
+        } catch (err) {
+            return {
+                k: false,
+                sc: err.statusCode,
+                h: {},
+                b: null,
+            };
+        }
+    },
+    patch: async (conn, { p, b, q }) => {
+        assertType(p, 'string', 'expected p to be a string');
+        if (b !== null) assertType(b, 'object', 'expected b to be an object or null');
+        assertType(q, 'object', 'expected q to be an object');
+
+        try {
+            const res = await conn.client.patch(p, b, q);
+            return {
+                k: res.ok,
+                sc: res.res.statusCode,
+                h: collectHeaders(headers),
+                b: res.body,
+            };
+        } catch (err) {
+            return {
+                k: false,
+                sc: err.statusCode,
+                h: {},
+                b: null,
+            };
+        }
+    },
+    perms: async (conn, { p }) => {
+        assertType(p, 'array', 'expected p to be an array');
+        const res = [];
+        for (const perm of p) {
+            assertType(perm, 'string', 'expected permission to be a string');
+            res.push(await conn.client.hasPerm(perm));
+        }
+        return { p: res };
+    },
+    permscf: async (conn, { f }) => {
+        assertType(f, 'array', 'expected f to be an array');
+        const res = [];
+        for (const fieldFlags of f) {
+            assertType(fieldFlags, 'string', 'expected field.flags to be a string');
+            const parts = fieldFlags.split('.');
+            const field = parts[0];
+            const flags = parts[1];
+            res.push(await conn.client.hasCodeholderField(field, flags));
+        }
+        return { f: res };
+    },
+    permsocf: async (conn, { f }) => {
+        assertType(f, 'array', 'expected f to be an array');
+        const res = [];
+        for (const fieldFlags of f) {
+            assertType(fieldFlags, 'string', 'expected field.flags to be a string');
+            const parts = fieldFlags.split('.');
+            const field = parts[0];
+            const flags = parts[1];
+            res.push(await conn.client.hasOwnCodeholderField(field, flags));
+        }
+        return { f: res };
     },
 };
+
+function collectHeaders (headers) {
+    const entries = {};
+    for (const [k, v] of headers.entries()) {
+        entries[k.toLowerCase()] = v;
+    }
+    return entries;
+}
