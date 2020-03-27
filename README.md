@@ -90,6 +90,9 @@ Additional fields:
 
 - `f`: (str[]) own codeholder fields formatted like `field.rw` to check
 
+##### type `x`
+Gracefully closes the connection.
+
 #### Server Responses
 Server responses always have `t` set to the string `~` or `~!`.
 
@@ -163,6 +166,9 @@ Additional fields:
 Additional fields:
 
 - `f`: (bool[]) whether the individual own codeholder field permissions are granted; in the same order as the input
+
+##### type `x`
+ACK.
 
 #### Server Messages
 ##### type `co`

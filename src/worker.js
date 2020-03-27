@@ -48,7 +48,7 @@ const MAX_SANE_MESSAGE_LEN = 10 * 1024 * 1024; // 10 MiB
 const encodeMessage = msg => {
     const packed = Buffer.from(encode(msg));
     const buf = Buffer.allocUnsafe(packed.length + 4);
-    buf.writeInt32LE(buf.length, 0);
+    buf.writeInt32LE(packed.length, 0);
     packed.copy(buf, 4);
     return buf;
 };
@@ -158,7 +158,7 @@ class ClientHandler {
         if (this.waitTasks > 0) {
             this.send({ t: '❤' });
         } else {
-            this.close({ t: 'TXERR', c: 103, m: 'timed out' });
+            this.close('TXERR', 103, 'timed out');
         }
     }
 
@@ -260,7 +260,7 @@ const messageHandlers = {
         if (sesx === false) return { auth: false };
         return {
             auth: true,
-            uea: sesx.ueaCode,
+            uea: sesx.newCode,
             id: sesx.id,
             totp: sesx.totpSetUp && !sesx.totpUsed,
         };
@@ -272,7 +272,7 @@ const messageHandlers = {
             const sesx = await conn.client.logIn(un, pw);
             return {
                 s: true,
-                uea: sesx.ueaCode,
+                uea: sesx.newCode,
                 id: sesx.id,
                 totp: sesx.totpSetUp && !sesx.totpUsed,
             };
@@ -341,7 +341,7 @@ const messageHandlers = {
             return {
                 k: res.ok,
                 sc: res.res.statusCode,
-                h: collectHeaders(headers),
+                h: collectHeaders(res.res.headers),
                 b: res.body,
             };
         } catch (err) {
@@ -349,7 +349,7 @@ const messageHandlers = {
                 k: false,
                 sc: err.statusCode,
                 h: {},
-                b: null,
+                b: err.toString(),
             };
         }
     },
@@ -362,7 +362,7 @@ const messageHandlers = {
             return {
                 k: res.ok,
                 sc: res.res.statusCode,
-                h: collectHeaders(headers),
+                h: collectHeaders(res.res.headers),
                 b: res.body,
             };
         } catch (err) {
@@ -370,7 +370,7 @@ const messageHandlers = {
                 k: false,
                 sc: err.statusCode,
                 h: {},
-                b: null,
+                b: err.toString(),
             };
         }
     },
@@ -397,7 +397,7 @@ const messageHandlers = {
             return {
                 k: res.ok,
                 sc: res.res.statusCode,
-                h: collectHeaders(headers),
+                h: collectHeaders(res.res.headers),
                 b: res.body,
             };
         } catch (err) {
@@ -405,7 +405,7 @@ const messageHandlers = {
                 k: false,
                 sc: err.statusCode,
                 h: {},
-                b: null,
+                b: err.toString(),
             };
         }
     },
@@ -432,7 +432,7 @@ const messageHandlers = {
             return {
                 k: res.ok,
                 sc: res.res.statusCode,
-                h: collectHeaders(headers),
+                h: collectHeaders(res.res.headers),
                 b: res.body,
             };
         } catch (err) {
@@ -440,7 +440,7 @@ const messageHandlers = {
                 k: false,
                 sc: err.statusCode,
                 h: {},
-                b: null,
+                b: err.toString(),
             };
         }
     },
@@ -454,7 +454,7 @@ const messageHandlers = {
             return {
                 k: res.ok,
                 sc: res.res.statusCode,
-                h: collectHeaders(headers),
+                h: collectHeaders(res.headers),
                 b: res.body,
             };
         } catch (err) {
@@ -462,7 +462,7 @@ const messageHandlers = {
                 k: false,
                 sc: err.statusCode,
                 h: {},
-                b: null,
+                b: err.toString(),
             };
         }
     },
@@ -498,6 +498,10 @@ const messageHandlers = {
             res.push(await conn.client.hasOwnCodeholderField(field, flags));
         }
         return { f: res };
+    },
+    x: async (conn) => {
+        conn.flushSendCookies();
+        return {};
     },
 };
 
