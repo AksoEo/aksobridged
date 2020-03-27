@@ -1,0 +1,8 @@
+{
+    "name": "tejo/aksobridge",
+    "type": "library",
+    "license": "GPL-3.0",
+    "require": {
+        "rybakit/msgpack": "^0.7.0"
+    }
+}
