@@ -252,6 +252,9 @@ const messageHandlers = {
             host: workerData.host,
             userAgent: workerData.userAgent,
             cookieJar: conn.cookies,
+            headers: {
+                'X-Forwarded-For': ip,
+            },
         });
 
         conn.didHandshake = true;
