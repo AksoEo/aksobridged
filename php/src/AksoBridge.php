@@ -26,7 +26,6 @@ class AksoBridge {
     public $idCounter = 0;
 
     // should be used to set Set-Cookie headers after the connection has ended
-    // TODO: deduplicate these...?
     public $setCookies = [];
 
     private $packer;
@@ -90,7 +89,9 @@ class AksoBridge {
 
     public function handleSetCookies($msg) {
         foreach ($msg['co'] as $cookie) {
-            $this->setCookies[] = $cookie;
+            $splitPos = strpos($cookie, "=");
+            $cookieName = substr($cookie, 0, $splitPos);
+            $this->setCookies[$cookieName] = $cookie;
         }
     }
 
