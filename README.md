@@ -14,6 +14,7 @@ This *must* be the first message a client sends upon establishing a connection. 
 
 Additional fields:
 
+- `api` (str) api host
 - `ip`: (str) proxied client IP address (used for rate limiting)
 - `co`: an object mapping cookie names to cookie values which will be passed verbatim to the AKSO API. Should be used to send the client’s session cookies.
 

@@ -366,7 +366,7 @@ const messageHandlers = {
                 totp: sesx.totpSetUp && !sesx.totpUsed,
             };
         } catch (err) {
-            if (err.statusCode === 401) {
+            if (err.statusCode === 400 || err.statusCode === 401) {
                 return { s: false, nopw: false };
             } else if (err.statusCode === 409) {
                 return { s: false, nopw: true };
@@ -398,7 +398,7 @@ const messageHandlers = {
             }
             return { s: true };
         } catch (err) {
-            if (err.statusCode === 401) {
+            if (err.statusCode === 400 || err.statusCode === 401) {
                 return { s: false, bad: false, nosx: false };
             } else if (err.statusCode === 403) {
                 return { s: false, bad: true, nosx: false };
