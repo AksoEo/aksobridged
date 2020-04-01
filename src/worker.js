@@ -4,6 +4,9 @@ const { UserClient } = require('@tejo/akso-client');
 const { CookieJar } = require('tough-cookie');
 const { encode, decode } = require('@msgpack/msgpack');
 const { setThreadName, info, debug, error } = require('./log');
+const path = require('path');
+const { promisify } = require('util');
+const fs = require('fs');
 
 process.on('uncaughtException', err => {
     error(`!!!! uncaught exception`);
@@ -17,6 +20,85 @@ parentPort.on('message', message => {
         init(message.channel);
     }
 });
+
+// The disk cache uses file names as an index for easy retrieval.
+// File names are the following base64(msgpack)-encoded objects:
+//
+// ```json
+// [apiHost, method, path, query]
+// ```
+//
+// object keys in query must be alphanumerically sorted.
+//
+// The file contents will then hold the following msgpack-encoded data:
+//
+// ```json
+// { maxAge: max age in seconds, data: (data object) }
+// ```
+//
+// Temporary files are used for writing. They will always start with a $ character.
+const cachePath = workerData.cachePath;
+
+function alphaSortObject (value) {
+    if (Array.isArray(value)) return value;
+    else if (typeof value === 'object' && value !== null) {
+        const keys = Object.keys(value).sort();
+        const res = {};
+        for (const k of keys) res[k] = value[k];
+        return res;
+    } else return value;
+}
+function getCacheKey (host, method, path, query) {
+    return Buffer.from(encode([host, method, path, alphaSortObject(query)])).toString('base64');
+}
+
+const fsStat = promisify(fs.stat);
+const fsReadFile = promisify(fs.readFile);
+const fsWriteFile = promisify(fs.writeFile);
+const fsRename = promisify(fs.rename);
+
+const cache = {
+    get: async (host, method, resPath, query) => {
+        const filePath = path.join(cachePath, getCacheKey(host, method, resPath, query));
+
+        // first, figure out file age
+        let stats;
+        try {
+            stats = await fsStat(filePath);
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                // no cache file
+                return null;
+            } else throw err;
+        }
+        const age = (Date.now() - stats.mtimeMs) / 1000;
+
+        // read the file
+        const contents = await fsReadFile(filePath);
+        const rootNode = decode(contents);
+
+        // if the file is older than we want, we pretend we don’t have anything
+        // cached
+        if (age > rootNode.maxAge) return null;
+        else return rootNode.data; // otherwise return the data
+    },
+    insert: async (host, method, resPath, query, maxCacheSecs, data) => {
+        const filePath = path.join(cachePath, getCacheKey(host, method, resPath, query));
+
+        const tmpWritePath = path.join(cachePath, '$' + Math.random().toString(36));
+
+        const fileData = encode({
+            maxAge: maxCacheSecs,
+            data,
+        });
+
+        // write the data into a new tmp file
+        await fsWriteFile(tmpWritePath, fileData);
+
+        // rename the file to the target name
+        await fsRename(tmpWritePath, filePath);
+    },
+};
 
 function init (channel) {
     debug('initializing');
@@ -68,6 +150,7 @@ class ClientHandler {
         this.didEnd = false;
 
         // -----
+        this.apiHost = null;
         this.didHandshake = false;
         this.ip = null;
         this.cookies = null;
@@ -218,14 +301,18 @@ function assertType (v, t, n) {
 }
 
 const messageHandlers = {
-    hi: async (conn, { ip, co }) => {
+    hi: async (conn, { ip, co, api }) => {
         debug(`connection handshake from ip ${ip}`);
+        assertType(api, 'string', 'expected api to be a string');
         assertType(ip, 'string', 'expected ip to be a string');
         assertType(co, 'object', 'expected co to be an object');
         if (conn.didHandshake) {
             throw new Error('double handshake');
         }
 
+        const apiHost = api;
+
+        conn.apiHost = apiHost;
         conn.cookies = {
             conn,
             jar: new CookieJar(),
@@ -244,12 +331,11 @@ const messageHandlers = {
         for (const k in co) {
             const v = co[k];
             assertType(v, 'string', 'expected cookie value to be a string');
-            conn.cookies.jar.setCookieSync(`${k}=${v}`, workerData.host);
+            conn.cookies.jar.setCookieSync(`${k}=${v}`, apiHost);
         }
 
-        // TODO: pass IP somehow...?
         conn.client = new UserClient({
-            host: workerData.host,
+            host: apiHost,
             userAgent: workerData.userAgent,
             cookieJar: conn.cookies,
             headers: {
@@ -335,18 +421,29 @@ const messageHandlers = {
             }
         }
     },
-    get: async (conn, { p, q }) => {
+    get: async (conn, { p, q, c }) => {
         assertType(p, 'string', 'expected p to be a string');
         assertType(q, 'object', 'expected q to be an object');
+        assertType(c, 'number', 'expected c to be a number');
+        if (c < 0) throw new Error('negative cache time');
+
+        if (c) {
+            const cachedResponse = await cache.get(conn.apiHost, 'GET', p, q);
+            if (cachedResponse !== null) return cachedResponse;
+        }
 
         try {
             const res = await conn.client.get(p, q);
-            return {
+            const response = {
                 k: res.ok,
-                sc: res.res.statusCode,
+                sc: res.res.status,
                 h: collectHeaders(res.res.headers),
                 b: res.body,
             };
+
+            if (c) await cache.insert(conn.apiHost, 'GET', p, q, c * 60, response);
+
+            return response;
         } catch (err) {
             return {
                 k: false,
@@ -364,7 +461,7 @@ const messageHandlers = {
             const res = await conn.client.delete(p, q);
             return {
                 k: res.ok,
-                sc: res.res.statusCode,
+                sc: res.res.status,
                 h: collectHeaders(res.res.headers),
                 b: res.body,
             };
@@ -399,7 +496,7 @@ const messageHandlers = {
             const res = await conn.client.post(p, b, q, files);
             return {
                 k: res.ok,
-                sc: res.res.statusCode,
+                sc: res.res.status,
                 h: collectHeaders(res.res.headers),
                 b: res.body,
             };
@@ -434,7 +531,7 @@ const messageHandlers = {
             const res = await conn.client.put(p, b, q, files);
             return {
                 k: res.ok,
-                sc: res.res.statusCode,
+                sc: res.res.status,
                 h: collectHeaders(res.res.headers),
                 b: res.body,
             };
@@ -456,7 +553,7 @@ const messageHandlers = {
             const res = await conn.client.patch(p, b, q);
             return {
                 k: res.ok,
-                sc: res.res.statusCode,
+                sc: res.res.status,
                 h: collectHeaders(res.headers),
                 b: res.body,
             };

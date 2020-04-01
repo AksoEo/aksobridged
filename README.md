@@ -39,6 +39,7 @@ Additional fields:
 
 - `p`: (str) path
 - `q`: (object) query
+- `c`: (number) minutes to cache this resource for. 0 will not cache. negative numbers will panic.
 
 ##### type `delete`
 Additional fields:

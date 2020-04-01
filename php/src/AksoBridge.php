@@ -106,7 +106,7 @@ class AksoBridge {
     }
 
     // opens a connection
-    public function open(string $ip, $cookies) {
+    public function open(string $apiHost, string $ip, $cookies) {
         $ipc_ports = [];
         // find ipc sockets in the path
         foreach (scandir($this->path) as $filename) {
@@ -122,7 +122,7 @@ class AksoBridge {
             throw new Exception('Failed to open socket');
         }
         fwrite($this->conn, "abx1");
-        return $this->handshake($ip, $cookies);
+        return $this->handshake($apiHost, $ip, $cookies);
     }
 
     public function close() {
@@ -132,8 +132,9 @@ class AksoBridge {
 
     // ---
 
-    public function handshake(string $ip, $cookies) {
+    public function handshake(string $apiHost, string $ip, $cookies) {
         return $this->request('hi', array(
+            'api' => $apiHost,
             'ip' => $ip,
             'co' => $cookies
         ));
@@ -169,10 +170,11 @@ class AksoBridge {
         return $this->request('-totp', array());
     }
 
-    public function get(string $path, $query) {
+    public function get(string $path, $query, $maxCacheAgeSecs = 0) {
         return $this->request('get', array(
             'p' => $path,
-            'q' => $query
+            'q' => $query,
+            'c' => $maxCacheAgeSecs
         ));
     }
 
