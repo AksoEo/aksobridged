@@ -1,6 +1,6 @@
 const { Server } = require('net');
 const { workerData, parentPort } = require('worker_threads');
-const { UserClient } = require('@tejo/akso-client');
+const { AppClient, UserClient } = require('@tejo/akso-client');
 const { CookieJar } = require('tough-cookie');
 const { encode, decode } = require('@msgpack/msgpack');
 const { setThreadName, info, debug, error } = require('./log');
@@ -248,7 +248,7 @@ class ClientHandler {
     // -----
 
     handleInput (message) {
-        if (!this.didHandshake && message.t !== 'hi') return;
+        if (!this.didHandshake && message.t !== 'hi' && message.t !== 'hic') return;
 
         const handler = messageHandlers[message.t];
         if (!handler) {
@@ -353,6 +353,30 @@ const messageHandlers = {
             id: sesx.id,
             totp: sesx.totpSetUp && !sesx.totpUsed,
         };
+    },
+    hic: async (conn, { api, key, sec }) => {
+        debug(`api client handshake for ${key}`);
+        assertType(api, 'string', 'expected api to be a string');
+        assertType(key, 'string', 'expected key to be a string');
+        assertType(sec, 'string', 'expected sec to be a string');
+        if (conn.didHandshake) {
+            throw new Error('double handshake');
+        }
+
+        const apiHost = api;
+        conn.apiHost = apiHost;
+
+        conn.client = new AppClient({
+            host: apiHost,
+            userAgent: workerData.userAgent,
+            apiKey: key,
+            apiSecret: sec,
+        });
+
+
+        conn.didHandshake = true;
+
+        return {};
     },
     login: async (conn, { un, pw }) => {
         assertType(un, 'string', 'expected un to be a string');

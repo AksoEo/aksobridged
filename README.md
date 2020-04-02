@@ -18,6 +18,16 @@ Additional fields:
 - `ip`: (str) proxied client IP address (used for rate limiting)
 - `co`: an object mapping cookie names to cookie values which will be passed verbatim to the AKSO API. Should be used to send the client’s session cookies.
 
+##### type `hic`
+This *must* be the first message a client sends upon establishing a connection. Then, the client must wait for the server to respond before continuing.
+
+This establishes the client as an API client. Various login-related methods will most likely break in this mode.
+
+Additional fields:
+- `api`: (str) api host
+- `key`: (str) api key
+- `sec`: (str) api secret
+
 ##### type `login`
 Additional fields:
 
@@ -110,6 +120,9 @@ Additional fields if `auth` is true:
 - `uea`: (str) uea code
 - `id`: (number) user id
 - `totp`: (bool) if true, the user still needs to use TOTP
+
+##### type `hic`
+ACK.
 
 ##### type `login`
 Additional fields:
