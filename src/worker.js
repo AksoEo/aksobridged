@@ -352,6 +352,7 @@ const messageHandlers = {
             uea: sesx.newCode,
             id: sesx.id,
             totp: sesx.totpSetUp && !sesx.totpUsed,
+            member: sesx.isActiveMember,
         };
     },
     hic: async (conn, { api, key, sec }) => {
@@ -388,6 +389,7 @@ const messageHandlers = {
                 uea: sesx.newCode,
                 id: sesx.id,
                 totp: sesx.totpSetUp && !sesx.totpUsed,
+                member: sesx.isActiveMember,
             };
         } catch (err) {
             if (err.statusCode === 400 || err.statusCode === 401) {

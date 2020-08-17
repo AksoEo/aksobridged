@@ -120,6 +120,7 @@ Additional fields if `auth` is true:
 - `uea`: (str) uea code
 - `id`: (number) user id
 - `totp`: (bool) if true, the user still needs to use TOTP
+- `member`: (bool) if true, the user is an active member
 
 ##### type `hic`
 ACK.
@@ -134,6 +135,7 @@ Additional fields if `s` is true:
 - `uea`: (str) uea code
 - `id`: (number) user id
 - `totp`: (bool) if true, the user still needs to use TOTP
+- `member`: (bool) if true, the user is an active member
 
 Additional fields if `s` is false:
 
