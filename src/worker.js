@@ -467,7 +467,7 @@ const messageHandlers = {
                 b: res.body,
             };
 
-            if (c) await cache.insert(conn.apiHost, 'GET', p, q, c * 60, response);
+            if (c) await cache.insert(conn.apiHost, 'GET', p, q, c, response);
 
             return response;
         } catch (err) {
