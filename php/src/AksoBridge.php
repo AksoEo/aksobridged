@@ -221,11 +221,12 @@ class AksoBridge {
         ));
     }
 
-    public function patch(string $path, $body, $query) {
+    public function patch(string $path, $body, $query, $files) {
         return $this->request('put', array(
             'p' => $path,
             'b' => $body,
-            'q' => $query
+            'q' => $query,
+            'f' => $files
         ));
     }
 

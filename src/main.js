@@ -111,7 +111,7 @@ async function cacheGC () {
         }
     }
 
-    info('completed GC sweep');
+    debug('completed GC sweep');
 }
 gcInterval = setInterval(() => {
     cacheGC().catch(err => error(`GC error: ${err}`));
