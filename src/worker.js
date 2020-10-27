@@ -633,6 +633,7 @@ const messageHandlers = {
 
 function collectHeaders (headers) {
     const entries = {};
+    if (!headers) return entries;
     for (const [k, v] of headers.entries()) {
         entries[k.toLowerCase()] = v;
     }

@@ -222,7 +222,7 @@ class AksoBridge {
     }
 
     public function patch(string $path, $body, $query, $files) {
-        return $this->request('put', array(
+        return $this->request('patch', array(
             'p' => $path,
             'b' => $body,
             'q' => $query,
