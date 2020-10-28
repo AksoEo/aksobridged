@@ -102,6 +102,19 @@ Additional fields:
 
 - `f`: (str[]) own codeholder fields formatted like `field.rw` to check
 
+##### type `regexp`
+Additional fields:
+
+- `r`: (str) regexp string
+- `s`: (str) test string
+
+##### type `asc`
+Additional fields:
+
+- `s`: (object[]) array of script objects
+- `fv`: (object) form vars
+- `e`: (object) expr to evaluate
+
 ##### type `x`
 Gracefully closes the connection.
 
@@ -183,6 +196,18 @@ Additional fields:
 Additional fields:
 
 - `f`: (bool[]) whether the individual own codeholder field permissions are granted; in the same order as the input
+
+##### type `regexp`
+Additional fields:
+
+- `m`: (bool) true if the pattern matches
+
+##### type `asc`
+Additional fields:
+
+- `s`: (bool) success
+- `v`: (any) if success, expr value
+- `e`: (string) error if not successful
 
 ##### type `x`
 ACK.

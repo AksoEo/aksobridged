@@ -1,6 +1,7 @@
 const { Server } = require('net');
 const { workerData, parentPort } = require('worker_threads');
 const { AppClient, UserClient } = require('@tejo/akso-client');
+const { evaluate } = require('@tejo/akso-script');
 const { CookieJar } = require('tough-cookie');
 const { encode, decode } = require('@msgpack/msgpack');
 const { setThreadName, info, debug, error } = require('./log');
@@ -624,6 +625,36 @@ const messageHandlers = {
             res.push(await conn.client.hasOwnCodeholderField(field, flags));
         }
         return { f: res };
+    },
+    regexp: async (conn, { r, s }) => {
+        assertType(r, 'string', 'expected r to be a string');
+        assertType(s, 'string', 'expected s to be a string');
+        try {
+            const re = new RegExp(r);
+            return { m: !!re.test(s) };
+        } catch (err) {
+            return { m: false };
+        }
+    },
+    asc: async (conn, { s, fv, e }) => {
+        assertType(s, 'array', 'expected s to be an array');
+        assertType(fv, 'object', 'expected fv to be an object');
+        assertType(e, 'object', 'expected e to be an object');
+        try {
+            let iter = 0;
+            const sym = Symbol('result');
+            const res = evaluate(s.concat({
+                [sym]: e,
+            }), sym, id => fv[id] || null, {
+                shouldHalt () {
+                    iter++;
+                    return iter > 4096;
+                },
+            });
+            return { s: true, v: res, e: null };
+        } catch (err) {
+            return { s: false, v: null, e: err.toString() };
+        }
     },
     x: async (conn) => {
         conn.flushSendCookies();

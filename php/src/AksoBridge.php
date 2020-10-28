@@ -247,4 +247,19 @@ class AksoBridge {
             'f' => $fields
         ));
     }
+
+    public function matchRegExp($re, $str) {
+        return $this->request('regexp', array(
+            'r' => $re,
+            's' => $str
+        ));
+    }
+
+    public function evalScript(array $stack, array $vars, array $expr) {
+        return $this->request('asc', array(
+            's' => $stack,
+            'fv' => $vars,
+            'e' => $expr
+        ));
+    }
 }
