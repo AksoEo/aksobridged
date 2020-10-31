@@ -115,6 +115,8 @@ Additional fields:
 - `fv`: (object) form vars
 - `e`: (object) expr to evaluate
 
+##### type `currencies`
+
 ##### type `x`
 Gracefully closes the connection.
 
@@ -208,6 +210,9 @@ Additional fields:
 - `s`: (bool) success
 - `v`: (any) if success, expr value
 - `e`: (string) error if not successful
+
+##### type `currencies`
+Returns the AKSO Script `currencies` object.
 
 ##### type `x`
 ACK.

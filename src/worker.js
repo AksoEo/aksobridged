@@ -1,7 +1,7 @@
 const { Server } = require('net');
 const { workerData, parentPort } = require('worker_threads');
 const { AppClient, UserClient } = require('@tejo/akso-client');
-const { evaluate } = require('@tejo/akso-script');
+const { evaluate, currencies } = require('@tejo/akso-script');
 const { CookieJar } = require('tough-cookie');
 const { encode, decode } = require('@msgpack/msgpack');
 const { setThreadName, info, debug, error } = require('./log');
@@ -655,6 +655,9 @@ const messageHandlers = {
         } catch (err) {
             return { s: false, v: null, e: err.toString() };
         }
+    },
+    currencies: async (conn) => {
+        return currencies;
     },
     x: async (conn) => {
         conn.flushSendCookies();

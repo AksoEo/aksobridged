@@ -262,4 +262,8 @@ class AksoBridge {
             'e' => $expr
         ));
     }
+
+    public function currencies() {
+        return $this->request('currencies', array());
+    }
 }
