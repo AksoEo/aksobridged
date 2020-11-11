@@ -8,6 +8,7 @@ const { setThreadName, info, debug, error } = require('./log');
 const path = require('path');
 const { promisify } = require('util');
 const fs = require('fs');
+const crypto = require('crypto');
 
 process.on('uncaughtException', err => {
     error(`!!!! uncaught exception`);
@@ -50,7 +51,9 @@ function alphaSortObject (value) {
     } else return value;
 }
 function getCacheKey (host, method, path, query) {
-    return Buffer.from(encode([host, method, path, alphaSortObject(query)])).toString('base64');
+    const hash = crypto.createHash('sha256');
+    hash.update(Buffer.from(encode([host, method, path, alphaSortObject(query)])));
+    return hash.digest('hex');
 }
 
 const fsStat = promisify(fs.stat);
