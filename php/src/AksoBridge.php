@@ -263,6 +263,15 @@ class AksoBridge {
         ));
     }
 
+    public function convertCurrency(array $rates, string $f, string $t, float $val) {
+        return $this->request('convertCurrency', array(
+            'r' => $rates,
+            'fc' => $f,
+            'tc' => $t,
+            'v' => $val
+        ));
+    }
+
     public function currencies() {
         return $this->request('currencies', array());
     }

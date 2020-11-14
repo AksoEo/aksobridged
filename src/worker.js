@@ -9,6 +9,7 @@ const path = require('path');
 const { promisify } = require('util');
 const fs = require('fs');
 const crypto = require('crypto');
+const { Cashify } = require('cashify');
 
 process.on('uncaughtException', err => {
     error(`!!!! uncaught exception`);
@@ -661,6 +662,15 @@ const messageHandlers = {
     },
     currencies: async (conn) => {
         return currencies;
+    },
+    convertCurrency: async (conn, { r, fc, tc, v }) => {
+        assertType(r, 'object', 'expected r to be an object');
+        assertType(fc, 'string', 'expected fc to be a string');
+        assertType(tc, 'string', 'expected tc to be a string');
+        assertType(v, 'number', 'expected f to be a number');
+
+        const cashify = new Cashify({ base: fc, rates: r });
+        return { v: cashify.convert(v, { from: fc, to: tc }) };
     },
     x: async (conn) => {
         conn.flushSendCookies();

@@ -117,6 +117,14 @@ Additional fields:
 
 ##### type `currencies`
 
+##### type `convertCurrency`
+Additional fields:
+
+- `r`: (obj) rates as { [currency]: value }
+- `fc`: (str) currency to convert from (should be base for `r`)
+- `tc`: (str) currency to convert to
+- `v`: (number) float value
+
 ##### type `x`
 Gracefully closes the connection.
 
@@ -213,6 +221,11 @@ Additional fields:
 
 ##### type `currencies`
 Returns the AKSO Script `currencies` object.
+
+##### type `convertCurrency`
+Additional fields:
+
+- `v`: (num) converted value (float)
 
 ##### type `x`
 ACK.
